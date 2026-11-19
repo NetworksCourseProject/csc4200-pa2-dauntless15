@@ -37,14 +37,65 @@ def checksum(data):
     one's-complement sum of its 16-bit big-endian words, padding an odd byte with 0.
     Chapter 5, Section 5.3.2 works one by hand."""
     # TODO
-    raise NotImplementedError
+    data = bytes(data)
+    total = 0
+
+    # Add complete 16-bit words
+    for i in range(0, len(data) - 1, 2):
+        word = (data[i] << 8) | data[i + 1]
+        total += word
+
+    # Pad an odd final byte on the right
+    if len(data) % 2:
+        total += data[-1] << 8
+
+    # Fold all carries into the lower 16 bits
+    while total >> 16:
+        total = (total & 0xFFFF) + (total >> 16)
+
+    # Return one's complement
+    return (~total) & 0xFFFF
 
 
 def encode(flags, seq, ack, payload=b""):
     """Return one complete segment: the 16-byte header (CHECKSUM computed over the
     header with CHECKSUM zero, plus the payload) followed by the payload."""
     # TODO
-    raise NotImplementedError
+    payload = bytes(payload)
+
+    if len(payload) > MAX_PAYLOAD:
+        raise ValueError(
+            f"Payload exceeds maximum size of {MAX_PAYLOAD} bytes"
+        )
+
+    # Construct the header with a zero checksum
+    header = HEADER.pack(
+        VERSION,
+        flags,
+        0,              # RESERVED
+        seq,
+        ack,
+        len(payload),
+        0               # CHECKSUM
+    )
+
+    # Calculate checksum over header + payload
+    segment = header + payload
+    checksum_value = checksum(segment)
+
+    # Insert the calculated checksum into bytes 14-15
+    header = HEADER.pack(
+        VERSION,
+        flags,
+        0,              # RESERVED
+        seq,
+        ack,
+        len(payload),
+        checksum_value
+    )
+
+    return header + payload
+
 
 
 class Invalid(Exception):
@@ -60,4 +111,41 @@ def decode(datagram):
     Invalid with the reason, applying the checks of Specification Section 6.1
     in that order."""
     # TODO
-    raise NotImplementedError
+    datagram = bytes(datagram)
+
+    datagram = bytes(datagram)
+
+    # Datagram must contain at least the 16-byte header
+    if len(datagram) < HEADER_SIZE:
+        raise Invalid("short")
+
+    # Verify checksum before checking other header fields
+    # A valid segment produces zero when its checksum is included.
+    if checksum(datagram) != 0:
+        raise Invalid("checksum")
+
+    # Parse the header
+    (
+        version,
+        flags,
+        reserved,
+        seq,
+        ack,
+        length,
+        received_checksum
+    ) = HEADER.unpack_from(datagram)
+
+    # Validate the header
+    if version != VERSION:
+        raise Invalid("header")
+
+    if length > MAX_PAYLOAD:
+        raise Invalid("header")
+
+    if length != len(datagram) - HEADER_SIZE:
+        raise Invalid("header")
+
+    # RESERVED and unknown flag bits are intentionally ignored
+    payload = datagram[HEADER_SIZE:]
+
+    return flags, seq, ack, payload

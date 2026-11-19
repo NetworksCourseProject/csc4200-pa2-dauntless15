@@ -5,7 +5,7 @@
 # make clean      remove build output
 
 PY       ?= python3
-PA2      ?= $(HOME)/csc4200-course/project/pa2
+PA2      ?= ../..
 
 .PHONY: build check measure clean
 
@@ -14,10 +14,10 @@ build:
 	$(PY) -m py_compile src/*.py
 
 check: build
-	$(PY) $(PA2)/etpt_selfcheck.py --no-build || true
+	PYTHONPATH="$(PA2)/../pa1:$$PYTHONPATH" $(PY) "$(PA2)/etpt_selfcheck.py" --no-build
 
 measure: build
-	$(PY) $(PA2)/etpt_measure.py
+	$(PY) "$(PA2)/etpt_measure.py"
 
 clean:
 	rm -rf src/__pycache__
